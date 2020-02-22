@@ -2,7 +2,7 @@
  * rm_uart.h
  *
  *  Created on: Jan 27, 2020
- *      Author: wang1
+ *      Author: WYT
  */
 
 #ifndef INC_RM_UART_H_
@@ -11,8 +11,8 @@
 #include "main.h"
 
 #define UART_RX_DMA_SIZE (1024)
-#define DBUS_MAX_LEN     (50)
-#define DBUS_BUFLEN      (18)
+#define DBUS_MAX_LEN     (36u)
+#define DBUS_BUFLEN      (18u)
 #define DBUS_HUART       huart1 /* for dji remote controler reciever */
 
 /**
@@ -67,6 +67,8 @@ typedef struct
 		    } bit;
 	} kb;
 } rc_info_t;
+
+extern rc_info_t rc;
 
 void uart_receive_handler(UART_HandleTypeDef *huart);
 void dbus_uart_init(void);

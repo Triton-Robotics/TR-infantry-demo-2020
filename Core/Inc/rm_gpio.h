@@ -2,7 +2,7 @@
  * rm_gpio.h
  *
  *  Created on: Jan 27, 2020
- *      Author: wang1
+ *      Author: WYT
  */
 
 #ifndef INC_RM_GPIO_H_

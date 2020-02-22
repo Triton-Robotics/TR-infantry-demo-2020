@@ -32,7 +32,7 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "pid.h"
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
@@ -40,6 +40,13 @@ extern "C" {
 extern UART_HandleTypeDef huart1;
 extern UART_HandleTypeDef huart2;
 extern UART_HandleTypeDef huart6;
+extern CAN_HandleTypeDef hcan1;
+extern CAN_HandleTypeDef hcan2;
+extern SPI_HandleTypeDef hspi5;
+extern TIM_HandleTypeDef htim2;
+extern TIM_HandleTypeDef htim3;
+extern TIM_HandleTypeDef htim4;
+extern TIM_HandleTypeDef htim12;
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
@@ -69,12 +76,19 @@ void Error_Handler(void);
 #define PWM_DEFAULT_DUTY 5000
 #define TIM_PSC_APB1 ((APB1_TIMER_CLOCKS/PWM_FREQUENCE)/PWM_RESOLUTION -1)
 #define TIM_PSC_APB2 ((APB2_TIMER_CLOCKS/PWM_FREQUENCE)/PWM_RESOLUTION -1)
+#define IST_INT_Pin GPIO_PIN_3
+#define IST_INT_GPIO_Port GPIOE
+#define IST_RST_Pin GPIO_PIN_2
+#define IST_RST_GPIO_Port GPIOE
 #define LED_RED_Pin GPIO_PIN_11
 #define LED_RED_GPIO_Port GPIOE
 #define LED_GREEN_Pin GPIO_PIN_14
 #define LED_GREEN_GPIO_Port GPIOF
 /* USER CODE BEGIN Private defines */
+//#define BOARD_DOWN (1)
 #define COUNTOF(__BUFFER__)   (sizeof(__BUFFER__) / sizeof(*(__BUFFER__)))
+#define ECD_PERIOD 8192.0f
+#define ANGLE_PERIOD 360.0f
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

@@ -1,4 +1,4 @@
-Core/Src/rm_uart.o: ../Core/Src/rm_uart.c ../Core/Inc/rm_uart.h \
+Core/Src/rm_pwm.o: ../Core/Src/rm_pwm.c ../Core/Inc/rm_pwm.h \
  ../Core/Inc/main.h ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal.h \
  ../Core/Inc/stm32f4xx_hal_conf.h \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_rcc.h \
@@ -29,9 +29,9 @@ Core/Src/rm_uart.o: ../Core/Src/rm_uart.c ../Core/Inc/rm_uart.h \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim.h \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim_ex.h \
  ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_uart.h \
- ../Core/Inc/pid.h
+ ../Core/Inc/pid.h ../Core/Inc/main.h
 
-../Core/Inc/rm_uart.h:
+../Core/Inc/rm_pwm.h:
 
 ../Core/Inc/main.h:
 
@@ -96,3 +96,5 @@ Core/Src/rm_uart.o: ../Core/Src/rm_uart.c ../Core/Inc/rm_uart.h \
 ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_uart.h:
 
 ../Core/Inc/pid.h:
+
+../Core/Inc/main.h:

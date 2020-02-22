@@ -9,7 +9,7 @@
 #include "stdlib.h"
 #include "rm_uart.h"
 
-uint8_t   dbus_buf[DBUS_BUFLEN];
+uint8_t   dbus_buf[DBUS_MAX_LEN];
 rc_info_t rc;
 
 
@@ -95,6 +95,15 @@ void rc_callback_handler(rc_info_t *rc, uint8_t *buff)
   {
     memset(rc, 0, sizeof(rc_info_t));
   }
+
+  rc->mouse.x = buff[6] | (buff[7] << 8);                    //!< Mouse X axis
+  rc->mouse.y = buff[8] | (buff[9] << 8);                    //!< Mouse Y axis
+  rc->mouse.z = buff[10] | (buff[11] << 8);                  //!< Mouse Z axis
+  rc->mouse.l = buff[12];                                  //!< Mouse Left Is Press ?
+  rc->mouse.r = buff[13];                                  //!< Mouse Right Is Press ?
+  rc->kb.key_code = buff[14] | (buff[15] << 8);                    //!< KeyBoard value
+  rc->wheel = buff[16] | ( buff[17] << 8);
+  rc->wheel -= 1024;
 }
 
 /**

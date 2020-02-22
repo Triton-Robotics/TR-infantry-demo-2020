@@ -23,9 +23,15 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "stdio.h"
+#include <stdlib.h>
+#include <stdio.h>
 #include "rm_uart.h"
 #include "rm_gpio.h"
+#include "rm_can.h"
+#include "rm_imu.h"
+#include "rm_pwm.h"
+#include "rm_ctrl.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -35,6 +41,12 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define INF_2
+// default positions
+#ifdef INF_2
+#define YAW_POS_DEFAULT (2617)
+#define PIT_POS_DEFAULT (4710)
+#endif
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -49,7 +61,9 @@ CAN_HandleTypeDef hcan2;
 SPI_HandleTypeDef hspi5;
 
 TIM_HandleTypeDef htim2;
+TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim4;
+TIM_HandleTypeDef htim12;
 
 UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
@@ -59,9 +73,23 @@ DMA_HandleTypeDef hdma_usart2_rx;
 DMA_HandleTypeDef hdma_usart2_tx;
 
 /* USER CODE BEGIN PV */
-extern rc_info_t rc;
 char buf[200];
 int count;
+
+// target definitions
+float wheels_speed[4] = {0};
+float yaw_target = 0;
+float pit_target = 0;
+float trigger_target = 0;
+
+// output definitions
+int16_t wheels_out[4] = {0};
+int16_t yaw_out = 0;
+int16_t pit_out = 0;
+int16_t trigger_out = 0;
+
+// tracking variables
+int16_t yaw_ecd;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -76,6 +104,8 @@ static void MX_TIM4_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_USART6_UART_Init(void);
+static void MX_TIM3_Init(void);
+static void MX_TIM12_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -92,7 +122,7 @@ static void MX_USART6_UART_Init(void);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-
+  count = 0; // keep count in while loop and reset every 10s
   /* USER CODE END 1 */
   
 
@@ -123,11 +153,25 @@ int main(void)
   MX_USART1_UART_Init();
   MX_USART2_UART_Init();
   MX_USART6_UART_Init();
+  MX_TIM3_Init();
+  MX_TIM12_Init();
   /* USER CODE BEGIN 2 */
 
   led_off();
   power_on();
   dbus_uart_init();
+  can_filter_init();
+  mpu_device_init();
+  init_quaternion();
+  pwm_imu_start();
+  pwm_buzzer_start();
+  grand_pid_init();
+  imu_calibration();
+
+  yaw_target = YAW_POS_DEFAULT;
+  pit_target = PIT_POS_DEFAULT;
+
+  //yaw_target = imu.yaw;
   /* USER CODE END 2 */
  
  
@@ -136,19 +180,38 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	mpu_get_data();
+	imu_ahrs_update();
+	imu_attitude_update();
+	yaw_ecd = motors[4].ecd;
+
+	yaw_target -= rc.ch1 * 100.0f / 660.0f;
+	yaw_target = set_rotation_target(yaw_target, ECD_PERIOD);
+	yaw_out = yaw_ecd_pid_ctrl(motors[4].ecd, yaw_target);
+
+	//yaw_target += rc.ch1 * 1.0f / 660.0f;
+	//yaw_target = set_rotation_target(yaw_target, ANGLE_PERIOD);
+	//yaw_out = yaw_imu_pid_ctrl(imu.yaw, yaw_target);
+
+	imu_temp_pid_ctrl(imu.temp, 50.0f);
+	//can_transmit(&hcan1, CAN_CHASSIS_ALL_ID, 0,600,0,0);
+	can_transmit(&hcan1, CAN_GIMBAL_ALL_ID, yaw_out, pit_out, trigger_out, 0);
+
+	if (count%100 == 0)
+	{
+		HAL_GPIO_TogglePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin);
+	}
+
+	/* reset count every 10s */
+	if (count == 2000)
+	{
+		count = 0;
+	}
+	count++;
+	HAL_Delay(5);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	sprintf(buf, "CH1: %4d  CH2: %4d  CH3: %4d  CH4: %4d  SW1: %1d  SW2: %1d \r\n", rc.ch1, rc.ch2, rc.ch3, rc.ch4, rc.sw1, rc.sw2);
-	//HAL_UART_Transmit(&huart6, (uint8_t *)buf, (COUNTOF(buf) - 1), 55);
-	HAL_UART_Transmit_DMA(&huart2, (uint8_t *)buf, (COUNTOF(buf) - 1));
-	HAL_Delay(50);
-	count++;
-	if (count==10)
-	{
-		HAL_GPIO_TogglePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin);
-		count=0;
-	}
   }
   /* USER CODE END 3 */
 }
@@ -369,6 +432,55 @@ static void MX_TIM2_Init(void)
 }
 
 /**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM3_Init(void)
+{
+
+  /* USER CODE BEGIN TIM3_Init 0 */
+
+  /* USER CODE END TIM3_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+
+  /* USER CODE BEGIN TIM3_Init 1 */
+
+  /* USER CODE END TIM3_Init 1 */
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 0;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 4999;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_PWM_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM3_Init 2 */
+
+  /* USER CODE END TIM3_Init 2 */
+  HAL_TIM_MspPostInit(&htim3);
+
+}
+
+/**
   * @brief TIM4 Initialization Function
   * @param None
   * @retval None
@@ -426,6 +538,48 @@ static void MX_TIM4_Init(void)
 
   /* USER CODE END TIM4_Init 2 */
   HAL_TIM_MspPostInit(&htim4);
+
+}
+
+/**
+  * @brief TIM12 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM12_Init(void)
+{
+
+  /* USER CODE BEGIN TIM12_Init 0 */
+
+  /* USER CODE END TIM12_Init 0 */
+
+  TIM_OC_InitTypeDef sConfigOC = {0};
+
+  /* USER CODE BEGIN TIM12_Init 1 */
+
+  /* USER CODE END TIM12_Init 1 */
+  htim12.Instance = TIM12;
+  htim12.Init.Prescaler = 3;
+  htim12.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim12.Init.Period = 7777;
+  htim12.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim12.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_PWM_Init(&htim12) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim12, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM12_Init 2 */
+
+  /* USER CODE END TIM12_Init 2 */
+  HAL_TIM_MspPostInit(&htim12);
 
 }
 
@@ -561,13 +715,16 @@ static void MX_GPIO_Init(void)
   GPIO_InitTypeDef GPIO_InitStruct = {0};
 
   /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOE_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_GPIOG_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
-  __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOF_CLK_ENABLE();
-  __HAL_RCC_GPIOE_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOE, IST_INT_Pin|IST_RST_Pin|LED_RED_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOH, GPIO_PIN_2|GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_5, GPIO_PIN_RESET);
@@ -575,8 +732,12 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOF, GPIO_PIN_6|LED_GREEN_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED_Pin, GPIO_PIN_RESET);
+  /*Configure GPIO pins : IST_INT_Pin IST_RST_Pin */
+  GPIO_InitStruct.Pin = IST_INT_Pin|IST_RST_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PH2 PH3 PH4 PH5 */
   GPIO_InitStruct.Pin = GPIO_PIN_2|GPIO_PIN_3|GPIO_PIN_4|GPIO_PIN_5;
